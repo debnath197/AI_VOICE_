@@ -132,7 +132,7 @@
           document.getElementById("transcript").value = "";
           updateStatus("Uploading audio...");
 
-          const response = await fetch("http://172.16.1.108:8000/process-audio", {
+          const response = await fetch("https://voice-answer-backend.onrender.com/process-audio", {
             method: "POST",
             body: formData
           });
