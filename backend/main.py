@@ -2,20 +2,9 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from openai import OpenAI
 import os
 
-app = FastAPI(title="Live Voice Answer App")
-
-# =========================
-# OPENAI SETUP
-# =========================
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-
-if not OPENAI_API_KEY:
-    print("WARNING: OPENAI_API_KEY not found")
-
-client = OpenAI(api_key=OPENAI_API_KEY)
+app = FastAPI(title="Free Voice Answer App")
 
 # =========================
 # CORS
@@ -36,9 +25,6 @@ PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, ".."))
 FRONTEND_DIR = os.path.join(PROJECT_ROOT, "frontend")
 INDEX_FILE = os.path.join(FRONTEND_DIR, "index.html")
 
-# =========================
-# STATIC FILES
-# =========================
 if os.path.exists(FRONTEND_DIR):
     app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
@@ -52,59 +38,43 @@ def home():
     return JSONResponse({"error": "index.html not found"}, status_code=404)
 
 # =========================
-# HEALTH
-# =========================
-@app.get("/health")
-def health():
-    return {"message": "Voice Answer App Running"}
-
-# =========================
 # TEST
 # =========================
 @app.get("/test")
 def test():
-    return {"status": "ok", "message": "Backend working"}
+    return {"status": "ok"}
 
 # =========================
-# ASK ROUTE
+# ASK ROUTE (FREE AI)
 # =========================
 @app.post("/ask")
 async def ask_question(request: Request):
-    try:
-        data = await request.json()
-        question = data.get("question", "").strip()
+    data = await request.json()
+    question = data.get("question", "").lower()
 
-        print("Received Question:", question)
+    print("Question:", question)
 
-        if not question:
-            return {"answer": "I could not hear your question properly. Please try again."}
+    # 🔥 FREE SMART ANSWERS
+    if "gis" in question:
+        return {"answer": "GIS stands for Geographic Information System. It is used to collect, manage, analyze, and visualize spatial data."}
 
-        if not OPENAI_API_KEY:
-            return {"answer": "OpenAI API key is missing. Please add OPENAI_API_KEY in Render Environment Variables."}
+    elif "python" in question:
+        return {"answer": "Python is a programming language widely used for automation, data analysis, and GIS scripting."}
 
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a helpful AI voice assistant. Give clear, short, natural spoken answers."
-                },
-                {
-                    "role": "user",
-                    "content": question
-                }
-            ],
-            temperature=0.7,
-            max_tokens=250
-        )
+    elif "arcgis" in question:
+        return {"answer": "ArcGIS is a GIS software used for mapping, spatial analysis, and geoprocessing."}
 
-        answer = response.choices[0].message.content.strip()
+    elif "network analysis" in question:
+        return {"answer": "Network analysis in GIS is used to find shortest path, routing, and service areas."}
 
-        return {"answer": answer}
+    elif "projection" in question:
+        return {"answer": "Projection converts the earth's curved surface into a flat map."}
 
-    except Exception as e:
-        print("ASK ERROR:", str(e))
-        return JSONResponse(
-            content={"answer": f"Backend error: {str(e)}"},
-            status_code=500
-        )
+    elif "hello" in question or "hi" in question:
+        return {"answer": "Hello! How can I help you today?"}
+
+    elif "interview" in question:
+        return {"answer": "In GIS interviews, focus on spatial analysis, projections, Python, and real project experience."}
+
+    else:
+        return {"answer": "I am a free AI assistant. Please ask about GIS, Python, or interview topics."}
