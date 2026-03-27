@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -26,13 +26,13 @@ FRONTEND_DIR = os.path.join(PROJECT_ROOT, "frontend")
 INDEX_FILE = os.path.join(FRONTEND_DIR, "index.html")
 
 # =========================
-# STATIC FILES (optional)
+# STATIC FILES
 # =========================
 if os.path.exists(FRONTEND_DIR):
     app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 # =========================
-# HOME ROUTE -> LOAD FRONTEND
+# HOME ROUTE
 # =========================
 @app.get("/")
 def serve_frontend():
@@ -44,7 +44,7 @@ def serve_frontend():
     )
 
 # =========================
-# HEALTH CHECK ROUTE
+# HEALTH CHECK
 # =========================
 @app.get("/health")
 def health_check():
@@ -58,10 +58,27 @@ def test():
     return {"status": "ok", "message": "Backend is working"}
 
 # =========================
-# SAMPLE ASK ROUTE (optional)
+# ASK ROUTE
 # =========================
 @app.post("/ask")
-async def ask_question():
-    return {
-        "answer": "Your backend is connected successfully!"
-    }
+async def ask_question(request: Request):
+    try:
+        data = await request.json()
+        question = data.get("question", "").strip()
+
+        print("Received Question:", question)
+
+        if not question:
+            return {"answer": "No question received from frontend."}
+
+        # Temporary test response
+        return {
+            "answer": f"You said: {question}"
+        }
+
+    except Exception as e:
+        print("ERROR in /ask:", str(e))
+        return JSONResponse(
+            content={"answer": f"Backend error: {str(e)}"},
+            status_code=500
+        )
