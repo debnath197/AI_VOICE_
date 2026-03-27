@@ -7,7 +7,7 @@ import os
 app = FastAPI(title="Live Voice Answer App")
 
 # =========================
-# CORS SETTINGS
+# CORS
 # =========================
 app.add_middleware(
     CORSMiddleware,
@@ -18,7 +18,7 @@ app.add_middleware(
 )
 
 # =========================
-# PATH SETTINGS
+# PATHS
 # =========================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, ".."))
@@ -32,33 +32,30 @@ if os.path.exists(FRONTEND_DIR):
     app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 # =========================
-# HOME ROUTE
+# FRONTEND HOME
 # =========================
 @app.get("/")
-def serve_frontend():
+def home():
     if os.path.exists(INDEX_FILE):
         return FileResponse(INDEX_FILE)
-    return JSONResponse(
-        content={"error": "index.html not found in frontend folder"},
-        status_code=404
-    )
+    return {"error": "index.html not found"}
 
 # =========================
-# HEALTH CHECK
+# HEALTH
 # =========================
 @app.get("/health")
-def health_check():
+def health():
     return {"message": "Voice Answer App Running"}
 
 # =========================
-# TEST ROUTE
+# TEST
 # =========================
 @app.get("/test")
 def test():
-    return {"status": "ok", "message": "Backend is working"}
+    return {"status": "ok"}
 
 # =========================
-# ASK ROUTE
+# ASK API
 # =========================
 @app.post("/ask")
 async def ask_question(request: Request):
@@ -69,15 +66,12 @@ async def ask_question(request: Request):
         print("Received Question:", question)
 
         if not question:
-            return {"answer": "No question received from frontend."}
+            return {"answer": "No question received."}
 
-        # Temporary test response
-        return {
-            "answer": f"You said: {question}"
-        }
+        return {"answer": f"You said: {question}"}
 
     except Exception as e:
-        print("ERROR in /ask:", str(e))
+        print("ERROR:", str(e))
         return JSONResponse(
             content={"answer": f"Backend error: {str(e)}"},
             status_code=500
