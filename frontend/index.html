@@ -1,1 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Live Voice Answer App</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 20px;
+    }
+    button {
+      padding: 12px 20px;
+      margin-right: 10px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    textarea {
+      width: 100%;
+      min-height: 180px;
+      margin-top: 15px;
+      padding: 12px;
+    }
+    .box {
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      padding: 20px;
+      margin-top: 20px;
+    }
+    #status {
+      margin-top: 15px;
+      font-weight: bold;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
 
+  <h1>🎤 Live Voice Answer App</h1>
+  <p>Speak your question, stop recording, and get an AI answer.</p>
+
+  <button onclick="startRecording()">Start Recording</button>
+  <button onclick="stopRecording()">Stop Recording</button>
+
+  <p id="status">Status: Ready</p>
+
+  <div class="box">
+    <h3>Transcript</h3>
+    <textarea id="transcript" readonly></textarea>
+  </div>
+
+  <div class="box">
+    <h3>AI Answer</h3>
+    <textarea id="answer" readonly></textarea>
+  </div>
+
+  <script>
+    let mediaRecorder;
+    let audioChunks = [];
+    let streamRef = null;
+
+    function updateStatus(msg) {
+      document.getElementById("status").innerText = "Status: " + msg;
+    }
+
+    async function startRecording() {
+      try {
+        // Browser support check
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          alert("Your browser does not support live microphone recording on this page. Please use Chrome/Edge on PC or open this page over HTTPS.");
+          updateStatus("Mic not supported in this browser");
+          return;
+        }
+
+        streamRef = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+        // Safari / iPhone compatibility
+        const mimeType = MediaRecorder.isTypeSupported("audio/webm")
+          ? "audio/webm"
+          : MediaRecorder.isTypeSupported("audio/mp4")
+          ? "audio/mp4"
+          : "";
+
+        if (!window.MediaRecorder) {
+          alert("MediaRecorder is not supported in this browser.");
+          updateStatus("MediaRecorder not supported");
+          return;
+        }
+
+        mediaRecorder = mimeType
+          ? new MediaRecorder(streamRef, { mimeType })
+          : new MediaRecorder(streamRef);
+
+        audioChunks = [];
+
+        mediaRecorder.ondataavailable = event => {
+          if (event.data.size > 0) {
+            audioChunks.push(event.data);
+          }
+        };
+
+        mediaRecorder.onstart = () => {
+          updateStatus("Recording...");
+        };
+
+        mediaRecorder.start();
+      } catch (err) {
+        alert("Mic access error: " + err.message);
+        updateStatus("Mic access failed");
+      }
+    }
+
+    async function stopRecording() {
+      if (!mediaRecorder) {
+        alert("Please start recording first.");
+        return;
+      }
+
+      updateStatus("Stopping...");
+
+      mediaRecorder.onstop = async () => {
+        try {
+          let audioType = mediaRecorder.mimeType || "audio/webm";
+          const audioBlob = new Blob(audioChunks, { type: audioType });
+
+          const formData = new FormData();
+          const fileExt = audioType.includes("mp4") ? "mp4" : "webm";
+          formData.append("file", audioBlob, "recording." + fileExt);
+
+          document.getElementById("answer").value = "Processing...";
+          document.getElementById("transcript").value = "";
+          updateStatus("Uploading audio...");
+
+          const response = await fetch("http://172.16.1.108:8000/process-audio", {
+            method: "POST",
+            body: formData
+          });
+
+          const data = await response.json();
+
+          document.getElementById("transcript").value = data.transcript || "No transcript";
+          document.getElementById("answer").value = data.answer || "No answer";
+          updateStatus("Done");
+        } catch (error) {
+          document.getElementById("answer").value = "Error: " + error.message;
+          updateStatus("Failed");
+        }
+
+        // mic stream বন্ধ
+        if (streamRef) {
+          streamRef.getTracks().forEach(track => track.stop());
+        }
+      };
+
+      mediaRecorder.stop();
+    }
+  </script>
+
+</body>
+</html>
