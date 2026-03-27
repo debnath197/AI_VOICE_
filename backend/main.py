@@ -2,9 +2,15 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from openai import OpenAI
 import os
 
 app = FastAPI(title="Live Voice Answer App")
+
+# =========================
+# OPENAI SETUP
+# =========================
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # =========================
 # CORS
@@ -32,21 +38,27 @@ if os.path.exists(FRONTEND_DIR):
     app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 # =========================
-# FRONTEND HOME
+# HOME ROUTE
 # =========================
 @app.get("/")
 def home():
     if os.path.exists(INDEX_FILE):
         return FileResponse(INDEX_FILE)
-    return JSONResponse({"error": "index.html not found"}, status_code=404)
+    return JSONResponse(
+        content={"error": "index.html not found in frontend folder"},
+        status_code=404
+    )
 
 # =========================
-# DEBUG ROUTES
+# HEALTH
 # =========================
 @app.get("/health")
 def health():
     return {"message": "Voice Answer App Running"}
 
+# =========================
+# TEST
+# =========================
 @app.get("/test")
 def test():
     return {"status": "ok", "message": "Backend working"}
@@ -63,9 +75,27 @@ async def ask_question(request: Request):
         print("Received Question:", question)
 
         if not question:
-            return {"answer": "No question received from frontend."}
+            return {"answer": "I could not hear your question properly. Please try again."}
 
-        return {"answer": f"You said: {question}"}
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a helpful AI voice assistant. Answer clearly, shortly, and naturally so it sounds good when spoken aloud."
+                },
+                {
+                    "role": "user",
+                    "content": question
+                }
+            ],
+            temperature=0.7,
+            max_tokens=200
+        )
+
+        answer = response.choices[0].message.content.strip()
+
+        return {"answer": answer}
 
     except Exception as e:
         print("ASK ERROR:", str(e))
