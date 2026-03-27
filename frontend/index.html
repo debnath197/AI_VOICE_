@@ -1,116 +1,110 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Live Voice Answer App</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 900px;
-            margin: 40px auto;
-            padding: 20px;
-            text-align: center;
-        }
+from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from openai import OpenAI
+import os
 
-        button {
-            padding: 12px 20px;
-            margin-top: 10px;
-            cursor: pointer;
-            font-size: 16px;
-        }
+app = FastAPI(title="Live Voice Answer App")
 
-        textarea {
-            width: 100%;
-            min-height: 120px;
-            margin-top: 20px;
-            padding: 10px;
-            font-size: 16px;
-        }
+# =========================
+# OPENAI SETUP
+# =========================
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-        #answer {
-            margin-top: 20px;
-            padding: 15px;
-            border: 1px solid #ccc;
-            min-height: 60px;
-            background: #f8f8f8;
-            font-size: 18px;
-            text-align: left;
-        }
-    </style>
-</head>
-<body>
+if not OPENAI_API_KEY:
+    print("WARNING: OPENAI_API_KEY not found")
 
-    <h1>🎤 Live Voice Answer App</h1>
-    <button id="startBtn">Start Speaking</button>
+client = OpenAI(api_key=OPENAI_API_KEY)
 
-    <h3>Your Speech:</h3>
-    <textarea id="transcript" placeholder="Your speech will appear here..."></textarea>
+# =========================
+# CORS
+# =========================
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    <h3>Answer:</h3>
-    <div id="answer">Waiting for your voice...</div>
+# =========================
+# PATHS
+# =========================
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, ".."))
+FRONTEND_DIR = os.path.join(PROJECT_ROOT, "frontend")
+INDEX_FILE = os.path.join(FRONTEND_DIR, "index.html")
 
-    <script>
-        const startBtn = document.getElementById("startBtn");
-        const transcriptBox = document.getElementById("transcript");
-        const answerBox = document.getElementById("answer");
+# =========================
+# STATIC FILES
+# =========================
+if os.path.exists(FRONTEND_DIR):
+    app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
-        const API_BASE = window.location.origin;
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+# =========================
+# HOME
+# =========================
+@app.get("/")
+def home():
+    if os.path.exists(INDEX_FILE):
+        return FileResponse(INDEX_FILE)
+    return JSONResponse({"error": "index.html not found"}, status_code=404)
 
-        if (!SpeechRecognition) {
-            alert("Speech Recognition is not supported in this browser. Please use Google Chrome.");
-        } else {
-            const recognition = new SpeechRecognition();
-            recognition.lang = "en-US";
-            recognition.interimResults = false;
-            recognition.maxAlternatives = 1;
-            recognition.continuous = false;
+# =========================
+# HEALTH
+# =========================
+@app.get("/health")
+def health():
+    return {"message": "Voice Answer App Running"}
 
-            startBtn.addEventListener("click", () => {
-                transcriptBox.value = "";
-                answerBox.innerText = "🎧 Listening... Please speak now.";
-                recognition.start();
-            });
+# =========================
+# TEST
+# =========================
+@app.get("/test")
+def test():
+    return {"status": "ok", "message": "Backend working"}
 
-            recognition.onresult = async (event) => {
-                const transcript = event.results[0][0].transcript;
-                transcriptBox.value = transcript;
-                answerBox.innerText = "⏳ Thinking...";
+# =========================
+# ASK ROUTE
+# =========================
+@app.post("/ask")
+async def ask_question(request: Request):
+    try:
+        data = await request.json()
+        question = data.get("question", "").strip()
 
-                try {
-                    const response = await fetch(`${API_BASE}/ask`, {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json"
-                        },
-                        body: JSON.stringify({ question: transcript })
-                    });
+        print("Received Question:", question)
 
-                    const data = await response.json();
-                    answerBox.innerText = data.answer;
+        if not question:
+            return {"answer": "I could not hear your question properly. Please try again."}
 
-                    const speech = new SpeechSynthesisUtterance(data.answer);
-                    speech.lang = "en-US";
-                    window.speechSynthesis.speak(speech);
+        if not OPENAI_API_KEY:
+            return {"answer": "OpenAI API key is missing. Please add OPENAI_API_KEY in Render Environment Variables."}
 
-                } catch (error) {
-                    console.error("Fetch Error:", error);
-                    answerBox.innerText = "❌ Failed to get answer from backend.";
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a helpful AI voice assistant. Give clear, short, natural spoken answers."
+                },
+                {
+                    "role": "user",
+                    "content": question
                 }
-            };
+            ],
+            temperature=0.7,
+            max_tokens=250
+        )
 
-            recognition.onerror = (event) => {
-                if (event.error === "no-speech") {
-                    answerBox.innerText = "⚠️ I could not hear anything. Please click again and speak clearly.";
-                } else if (event.error === "not-allowed") {
-                    answerBox.innerText = "⚠️ Microphone permission denied. Please allow microphone access.";
-                } else {
-                    answerBox.innerText = "❌ Speech Recognition Error: " + event.error;
-                }
-            };
-        }
-    </script>
+        answer = response.choices[0].message.content.strip()
 
-</body>
-</html>
+        return {"answer": answer}
+
+    except Exception as e:
+        print("ASK ERROR:", str(e))
+        return JSONResponse(
+            content={"answer": f"Backend error: {str(e)}"},
+            status_code=500
+        )
