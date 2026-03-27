@@ -28,7 +28,7 @@
             font-size: 16px;
         }
 
-        #answer, #debug {
+        #answer {
             margin-top: 20px;
             padding: 15px;
             border: 1px solid #ccc;
@@ -36,11 +36,6 @@
             background: #f8f8f8;
             font-size: 18px;
             text-align: left;
-        }
-
-        #debug {
-            font-size: 14px;
-            background: #fffbe6;
         }
     </style>
 </head>
@@ -55,19 +50,12 @@
     <h3>Answer:</h3>
     <div id="answer">Waiting for your voice...</div>
 
-    <h3>Debug:</h3>
-    <div id="debug">Debug info will appear here...</div>
-
     <script>
         const startBtn = document.getElementById("startBtn");
         const transcriptBox = document.getElementById("transcript");
         const answerBox = document.getElementById("answer");
-        const debugBox = document.getElementById("debug");
 
         const API_BASE = window.location.origin;
-
-        debugBox.innerText = "App loaded from: " + API_BASE;
-
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
         if (!SpeechRecognition) {
@@ -77,23 +65,21 @@
             recognition.lang = "en-US";
             recognition.interimResults = false;
             recognition.maxAlternatives = 1;
+            recognition.continuous = false;
 
             startBtn.addEventListener("click", () => {
-                answerBox.innerText = "🎧 Listening...";
-                debugBox.innerText = "Mic started...";
+                transcriptBox.value = "";
+                answerBox.innerText = "🎧 Listening... Please speak now.";
                 recognition.start();
             });
 
             recognition.onresult = async (event) => {
                 const transcript = event.results[0][0].transcript;
                 transcriptBox.value = transcript;
-                answerBox.innerText = "⏳ Processing...";
-
-                const askUrl = `${API_BASE}/ask`;
-                debugBox.innerText = `Trying API: ${askUrl}\nQuestion: ${transcript}`;
+                answerBox.innerText = "⏳ Thinking...";
 
                 try {
-                    const response = await fetch(askUrl, {
+                    const response = await fetch(`${API_BASE}/ask`, {
                         method: "POST",
                         headers: {
                             "Content-Type": "application/json"
@@ -101,27 +87,27 @@
                         body: JSON.stringify({ question: transcript })
                     });
 
-                    debugBox.innerText += `\nResponse status: ${response.status}`;
-
                     const data = await response.json();
                     answerBox.innerText = data.answer;
 
-                    // Speak answer
                     const speech = new SpeechSynthesisUtterance(data.answer);
                     speech.lang = "en-US";
                     window.speechSynthesis.speak(speech);
 
                 } catch (error) {
                     console.error("Fetch Error:", error);
-                    debugBox.innerText += `\nFetch Error: ${error.message}`;
-                    answerBox.innerText = "❌ Error: Failed to fetch answer from backend.";
+                    answerBox.innerText = "❌ Failed to get answer from backend.";
                 }
             };
 
             recognition.onerror = (event) => {
-                console.error("Speech Recognition Error:", event.error);
-                debugBox.innerText = "Speech recognition error: " + event.error;
-                answerBox.innerText = "❌ Speech Recognition Error: " + event.error;
+                if (event.error === "no-speech") {
+                    answerBox.innerText = "⚠️ I could not hear anything. Please click again and speak clearly.";
+                } else if (event.error === "not-allowed") {
+                    answerBox.innerText = "⚠️ Microphone permission denied. Please allow microphone access.";
+                } else {
+                    answerBox.innerText = "❌ Speech Recognition Error: " + event.error;
+                }
             };
         }
     </script>
