@@ -38,24 +38,21 @@ if os.path.exists(FRONTEND_DIR):
 def home():
     if os.path.exists(INDEX_FILE):
         return FileResponse(INDEX_FILE)
-    return {"error": "index.html not found"}
+    return JSONResponse({"error": "index.html not found"}, status_code=404)
 
 # =========================
-# HEALTH
+# DEBUG ROUTES
 # =========================
 @app.get("/health")
 def health():
     return {"message": "Voice Answer App Running"}
 
-# =========================
-# TEST
-# =========================
 @app.get("/test")
 def test():
-    return {"status": "ok"}
+    return {"status": "ok", "message": "Backend working"}
 
 # =========================
-# ASK API
+# ASK ROUTE
 # =========================
 @app.post("/ask")
 async def ask_question(request: Request):
@@ -66,12 +63,12 @@ async def ask_question(request: Request):
         print("Received Question:", question)
 
         if not question:
-            return {"answer": "No question received."}
+            return {"answer": "No question received from frontend."}
 
         return {"answer": f"You said: {question}"}
 
     except Exception as e:
-        print("ERROR:", str(e))
+        print("ASK ERROR:", str(e))
         return JSONResponse(
             content={"answer": f"Backend error: {str(e)}"},
             status_code=500
