@@ -1,10 +1,12 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, UploadFile, File
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
+import requests
+import shutil
 
-app = FastAPI(title="Free Voice Answer App")
+app = FastAPI(title="Voice AI App")
 
 # =========================
 # CORS
@@ -25,6 +27,9 @@ PROJECT_ROOT = os.path.abspath(os.path.join(BASE_DIR, ".."))
 FRONTEND_DIR = os.path.join(PROJECT_ROOT, "frontend")
 INDEX_FILE = os.path.join(FRONTEND_DIR, "index.html")
 
+UPLOAD_DIR = os.path.join(BASE_DIR, "temp_audio")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
 if os.path.exists(FRONTEND_DIR):
     app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
@@ -42,39 +47,50 @@ def home():
 # =========================
 @app.get("/test")
 def test():
-    return {"status": "ok"}
+    return {"status": "ok", "message": "Backend is working"}
 
 # =========================
-# ASK ROUTE (FREE AI)
+# TEXT → AI (MAIN)
 # =========================
-@app.post("/ask")
-async def ask_question(request: Request):
-    data = await request.json()
-    question = data.get("question", "").lower()
+def generate_answer(question: str):
+    prompt = f"""
+You are a smart AI assistant.
 
-    print("Question:", question)
+Answer clearly and naturally like speaking.
+Keep answers short and useful.
 
-    # 🔥 FREE SMART ANSWERS
-    if "gis" in question:
-        return {"answer": "GIS stands for Geographic Information System. It is used to collect, manage, analyze, and visualize spatial data."}
+Question:
+{question}
+"""
 
-    elif "python" in question:
-        return {"answer": "Python is a programming language widely used for automation, data analysis, and GIS scripting."}
+    response = requests.post(
+        "http://localhost:11434/api/generate",
+        json={
+            "model": "llama3",
+            "prompt": prompt,
+            "stream": False
+        }
+    )
 
-    elif "arcgis" in question:
-        return {"answer": "ArcGIS is a GIS software used for mapping, spatial analysis, and geoprocessing."}
+    data = response.json()
+    return data.get("response", "No answer generated.")
 
-    elif "network analysis" in question:
-        return {"answer": "Network analysis in GIS is used to find shortest path, routing, and service areas."}
+# =========================
+# AUDIO PROCESS ROUTE
+# =========================
+@app.post("/process-audio")
+async def process_audio(file: UploadFile = File(...)):
+    file_path = os.path.join(UPLOAD_DIR, file.filename)
 
-    elif "projection" in question:
-        return {"answer": "Projection converts the earth's curved surface into a flat map."}
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
 
-    elif "hello" in question or "hi" in question:
-        return {"answer": "Hello! How can I help you today?"}
+    # 🔥 SIMPLE FAKE TRANSCRIPT (free workaround)
+    transcript = "User asked a question from voice."
 
-    elif "interview" in question:
-        return {"answer": "In GIS interviews, focus on spatial analysis, projections, Python, and real project experience."}
+    answer = generate_answer(transcript)
 
-    else:
-        return {"answer": "I am a free AI assistant. Please ask about GIS, Python, or interview topics."}
+    return {
+        "transcript": transcript,
+        "answer": answer
+    }
