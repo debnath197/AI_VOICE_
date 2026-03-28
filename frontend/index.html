@@ -2,67 +2,291 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Live Voice Answer App</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voice AI Assistant</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+
+    h1 {
+      text-align: center;
+    }
+
+    .controls {
+      text-align: center;
+      margin: 20px 0;
+    }
+
+    button {
+      padding: 12px 20px;
+      margin: 8px;
+      cursor: pointer;
+      border: none;
+      border-radius: 8px;
+      background: #222;
+      color: white;
+      font-size: 16px;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 130px;
+      margin-top: 12px;
+      padding: 12px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+    }
+
+    .box {
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      padding: 18px;
+      margin-top: 20px;
+    }
+
+    #answer {
+      min-height: 120px;
+      white-space: pre-wrap;
+      font-size: 17px;
+      line-height: 1.6;
+    }
+
+    #status {
+      text-align: center;
+      font-weight: bold;
+      margin-top: 15px;
+      color: #333;
+    }
+  </style>
 </head>
 <body>
 
-<h1>🎤 Voice AI Assistant</h1>
+  <h1>🎤 Voice AI Assistant</h1>
 
-<button onclick="startListening()">🎙 Speak</button>
+  <div class="controls">
+    <button onclick="startListening()">🎙 Start Speaking</button>
+    <button onclick="stopListening()">⏹ Stop</button>
+    <button onclick="askFromText()">💬 Ask from Text</button>
+    <button onclick="speakAgain()">🔊 Speak Again</button>
+    <button onclick="clearAll()">🗑 Clear</button>
+  </div>
 
-<p id="status">Ready</p>
+  <p id="status">Status: Ready</p>
 
-<textarea id="transcript" placeholder="Your question"></textarea>
-<textarea id="answer" placeholder="AI answer"></textarea>
+  <div class="box">
+    <h3>Your Question</h3>
+    <textarea id="transcript" placeholder="Speak or type your question here..."></textarea>
+  </div>
 
-<script>
-let recognition;
+  <div class="box">
+    <h3>AI Answer</h3>
+    <div id="answer">Waiting for your question...</div>
+  </div>
 
-function speak(text) {
-  const speech = new SpeechSynthesisUtterance(text);
-  speech.lang = "en-US";
-  window.speechSynthesis.speak(speech);
-}
+  <script>
+    let recognition;
+    let finalTranscript = "";
+    let currentAnswer = "";
 
-function startListening() {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const transcriptBox = document.getElementById("transcript");
+    const answerBox = document.getElementById("answer");
+    const statusBox = document.getElementById("status");
 
-  if (!SpeechRecognition) {
-    alert("Use Chrome browser");
-    return;
-  }
+    function updateStatus(msg) {
+      statusBox.innerText = "Status: " + msg;
+    }
 
-  recognition = new SpeechRecognition();
-  recognition.lang = "en-US";
+    function speakText(text) {
+      if (!text || !text.trim()) return;
 
-  recognition.onstart = () => {
-    document.getElementById("status").innerText = "Listening...";
-  };
+      window.speechSynthesis.cancel();
 
-  recognition.onresult = async (event) => {
-    const text = event.results[0][0].transcript;
+      const speech = new SpeechSynthesisUtterance(text);
+      speech.lang = "en-US";
+      speech.rate = 1;
+      speech.pitch = 1;
+      speech.volume = 1;
 
-    document.getElementById("transcript").value = text;
-    document.getElementById("status").innerText = "Processing...";
+      window.speechSynthesis.speak(speech);
+    }
 
-    const res = await fetch("/ask", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ question: text })
-    });
+    function typeAnswer(text) {
+      answerBox.innerText = "";
+      let i = 0;
 
-    const data = await res.json();
+      const interval = setInterval(() => {
+        if (i < text.length) {
+          answerBox.innerText += text.charAt(i);
+          i++;
+        } else {
+          clearInterval(interval);
+        }
+      }, 10);
+    }
 
-    document.getElementById("answer").value = data.answer;
+    async function askBackend(question) {
+      if (!question.trim()) {
+        answerBox.innerText = "⚠️ Please say or type a question first.";
+        return;
+      }
 
-    speak(data.answer);
-  };
+      answerBox.innerText = "⏳ Thinking...";
+      updateStatus("Getting answer...");
 
-  recognition.start();
-}
-</script>
+      try {
+        const response = await fetch("/ask", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ question: question.trim() })
+        });
+
+        const data = await response.json();
+
+        if (data.answer) {
+          currentAnswer = data.answer;
+          typeAnswer(data.answer);
+          updateStatus("Answer received");
+
+          setTimeout(() => {
+            speakText(data.answer);
+          }, 700);
+        } else {
+          answerBox.innerText = "❌ No answer received.";
+          updateStatus("No answer");
+        }
+
+      } catch (error) {
+        console.error("Backend error:", error);
+        answerBox.innerText = "❌ Failed to connect backend.";
+        updateStatus("Backend failed");
+      }
+    }
+
+    function setupRecognition() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+      if (!SpeechRecognition) {
+        updateStatus("Speech recognition not supported. Use Google Chrome.");
+        alert("Use Google Chrome on desktop.");
+        return false;
+      }
+
+      recognition = new SpeechRecognition();
+      recognition.lang = "en-US";
+      recognition.interimResults = true;
+      recognition.continuous = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        finalTranscript = "";
+        transcriptBox.value = "";
+        answerBox.innerText = "🎧 Listening...";
+        updateStatus("Listening...");
+      };
+
+      recognition.onresult = (event) => {
+        let tempTranscript = "";
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript + " ";
+          } else {
+            tempTranscript += transcript;
+          }
+        }
+
+        transcriptBox.value = (finalTranscript + tempTranscript).trim();
+        updateStatus("Speech detected");
+      };
+
+      recognition.onerror = (event) => {
+        console.error("Speech error:", event.error);
+
+        if (event.error === "not-allowed") {
+          answerBox.innerText = "⚠️ Microphone permission denied. Allow microphone access.";
+          updateStatus("Mic permission denied");
+        } else if (event.error === "no-speech") {
+          answerBox.innerText = "⚠️ No speech detected. Speak immediately after clicking.";
+          updateStatus("No speech");
+        } else {
+          answerBox.innerText = "❌ Speech error: " + event.error;
+          updateStatus("Speech error");
+        }
+      };
+
+      recognition.onend = () => {
+        updateStatus("Listening stopped");
+
+        const question = transcriptBox.value.trim();
+        if (question.length > 0) {
+          askBackend(question);
+        }
+      };
+
+      return true;
+    }
+
+    function startListening() {
+      window.speechSynthesis.cancel();
+
+      if (!recognition) {
+        const ok = setupRecognition();
+        if (!ok) return;
+      }
+
+      try {
+        transcriptBox.value = "";
+        finalTranscript = "";
+        answerBox.innerText = "🎤 Starting microphone...";
+        updateStatus("Starting mic...");
+
+        setTimeout(() => {
+          recognition.start();
+        }, 300);
+      } catch (err) {
+        console.error(err);
+        updateStatus("Could not start mic");
+      }
+    }
+
+    function stopListening() {
+      if (recognition) {
+        recognition.stop();
+      }
+    }
+
+    function askFromText() {
+      askBackend(transcriptBox.value);
+    }
+
+    function speakAgain() {
+      speakText(currentAnswer || answerBox.innerText);
+    }
+
+    function clearAll() {
+      window.speechSynthesis.cancel();
+      transcriptBox.value = "";
+      answerBox.innerText = "Waiting for your question...";
+      currentAnswer = "";
+      updateStatus("Ready");
+    }
+  </script>
 
 </body>
 </html>
